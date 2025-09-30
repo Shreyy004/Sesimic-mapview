@@ -111,9 +111,7 @@ def survey_boundary():
         'sgs': sgs
     })
 
-# ----------------------
-# NEW: Optimized grid data for all lines with hover info
-# ----------------------
+
 @app.route('/grid-data-all')
 def grid_data_all():
     """
@@ -167,9 +165,7 @@ def grid_data_all():
         'total_xlines': len(xline_data)
     })
 
-# ----------------------
-# Alternative: Optimized grid data using segments (for very large datasets)
-# ----------------------
+
 @app.route('/grid-data-optimized')
 def grid_data_optimized():
     """
@@ -228,9 +224,7 @@ def grid_data_optimized():
         'total_xlines': len(xline_segments)
     })
 
-# ----------------------
-# Grid coordinates endpoint
-# ----------------------
+
 @app.route('/grid-coordinates')
 def grid_coordinates():
     """
@@ -260,9 +254,7 @@ def grid_coordinates():
     
     return jsonify(grid_coords)
 
-# ----------------------
-# NEW endpoint to combine everything for React
-# ----------------------
+
 @app.route('/get_survey_data')
 def get_survey_data():
     """
@@ -291,3 +283,4 @@ def get_survey_data():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
