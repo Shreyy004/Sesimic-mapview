@@ -6,39 +6,99 @@ export default function MapView() {
   const [gridData, setGridData] = useState({ inlines: [], xlines: [] });
   const [boundary, setBoundary] = useState([]);
   const [surveyData, setSurveyData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    axios.get("http://127.0.0.1:5000/grid-data").then((res) => setGridData(res.data));
-    axios.get("http://127.0.0.1:5000/survey-boundary").then((res) => {
-      setBoundary(res.data.boundary);
-      setSurveyData(res.data);
-    });
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        const gridResponse = await axios.get("http://127.0.0.1:5000/grid-data-all");
+        setGridData(gridResponse.data);
+        
+        const boundaryResponse = await axios.get("http://127.0.0.1:5000/survey-boundary");
+        setBoundary(boundaryResponse.data.boundary);
+        setSurveyData(boundaryResponse.data);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  // Build grid traces (inline blue, xline red)
-  const inlineTraces = gridData.inlines.map((il) => ({
-    x: il.points.map((p) => p[0]),
-    y: il.points.map((p) => p[1]),
-    mode: "lines",
-    line: { color: "blue", width: 1 },
-    hoverinfo: "text",
-    text: il.points.map(
-      (p) => `INLINE: ${il.inline}<br>X: ${p[0]}<br>Y: ${p[1]}`
-    ),
-    showlegend: false,
-  }));
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '90vh',
+        color: 'white',
+        backgroundColor: 'black',
+        fontSize: '18px'
+      }}>
+        Loading seismic survey data...
+      </div>
+    );
+  }
 
-  const xlineTraces = gridData.xlines.map((xl) => ({
-    x: xl.points.map((p) => p[0]),
-    y: xl.points.map((p) => p[1]),
-    mode: "lines",
-    line: { color: "red", width: 1 },
-    hoverinfo: "text",
-    text: xl.points.map(
-      (p) => `XLINE: ${xl.xline}<br>X: ${p[0]}<br>Y: ${p[1]}`
-    ),
-    showlegend: false,
-  }));
+  // Build grid traces with enhanced colors and hover info
+  const inlineTraces = gridData.inlines.map((il) => {
+    const x = il.points.map(p => p[0]);
+    const y = il.points.map(p => p[1]);
+    
+    // Cyan color for inlines (contrasts well with red)
+    return {
+      x: x,
+      y: y,
+      mode: "lines",
+      line: { 
+        color: "#00FFFF", // Bright cyan
+        width: 1,
+        opacity: 0.8
+      },
+      hoverinfo: "text",
+      text: il.hover_info,
+      showlegend: false,
+      name: `IL${il.inline}`,
+      hovertemplate: '<b>%{text}</b><extra></extra>',
+      hoverlabel: {
+        bgcolor: "black",
+        bordercolor: "#00FFFF",
+        font: { color: "white", size: 12 }
+      }
+    };
+  });
+
+  const xlineTraces = gridData.xlines.map((xl) => {
+    const x = xl.points.map(p => p[0]);
+    const y = xl.points.map(p => p[1]);
+    
+    // Red color for xlines
+    return {
+      x: x,
+      y: y,
+      mode: "lines",
+      line: { 
+        color: "red", // Red
+        width: 1,
+        opacity: 0.8
+      },
+      hoverinfo: "text",
+      text: xl.hover_info,
+      showlegend: false,
+      name: `XL${xl.xline}`,
+      hovertemplate: '<b>%{text}</b><extra></extra>',
+      hoverlabel: {
+        bgcolor: "black",
+        bordercolor: "red",
+        font: { color: "white", size: 12 }
+      }
+    };
+  });
 
   // Survey boundary trace
   const boundaryX = boundary.map((p) => p[0]);
@@ -48,28 +108,18 @@ export default function MapView() {
     x: [...boundaryX, boundaryX[0]],
     y: [...boundaryY, boundaryY[0]],
     mode: "lines+markers",
-    line: { color: "green", width: 2 },
-    marker: { size: 6, color: "green" },
+    line: { color: "#00FF00", width: 3 }, // Bright green
+    marker: { size: 8, color: "#00FF00" },
     hoverinfo: "skip",
     showlegend: false,
+    name: "Survey Boundary"
   };
 
-  // Compute extents
-  const allX = [
-    ...boundaryX,
-    ...gridData.inlines.flatMap(il => il.points.map(p => p[0])),
-    ...gridData.xlines.flatMap(xl => xl.points.map(p => p[0]))
-  ];
-  const allY = [
-    ...boundaryY,
-    ...gridData.inlines.flatMap(il => il.points.map(p => p[1])),
-    ...gridData.xlines.flatMap(xl => xl.points.map(p => p[1]))
-  ];
-
-  const minX = Math.min(...allX);
-  const maxX = Math.max(...allX);
-  const minY = Math.min(...allY);
-  const maxY = Math.max(...allY);
+  // Compute extents from boundary
+  const minX = Math.min(...boundaryX);
+  const maxX = Math.max(...boundaryX);
+  const minY = Math.min(...boundaryY);
+  const maxY = Math.max(...boundaryY);
 
   // Add padding for visualization
   const paddingX = (maxX - minX) * 0.05;
@@ -79,7 +129,7 @@ export default function MapView() {
   const plotMinY = minY - paddingY;
   const plotMaxY = maxY + paddingY;
 
-  // Outer grid coordinates and axis labels (all in white)
+  // Outer grid coordinates and axis labels 
   const numTicks = 7;
   const xStep = (maxX - minX) / (numTicks - 1);
   const yStep = (maxY - minY) / (numTicks - 1);
@@ -200,24 +250,24 @@ export default function MapView() {
         x: x + nx, y: y + ny + 13,
         text: `IL${surveyData.iline_cood[i]}`,
         showarrow: false,
-        font: { color: "blue", size: 13, family: "Arial" },
+        font: { color: "#00FFFF", size: 13, family: "Arial", weight: "bold" },
         xanchor: "center", yanchor: "middle",
         bgcolor: "rgba(0,0,0,0.95)",
-        bordercolor: "blue", borderwidth: 1, borderpad: 3,
+        bordercolor: "#00FFFF", borderwidth: 2, borderpad: 3,
       });
       boundaryAnnotations.push({
         x: x + nx, y: y + ny - 13,
         text: `XL${surveyData.xline_cood[i]}`,
         showarrow: false,
-        font: { color: "red", size: 13, family: "Arial" },
+        font: { color: "red", size: 13, family: "Arial", weight: "bold" },
         xanchor: "center", yanchor: "middle",
         bgcolor: "rgba(0,0,0,0.95)",
-        bordercolor: "red", borderwidth: 1, borderpad: 3,
+        bordercolor: "red", borderwidth: 2, borderpad: 3,
       });
     }
   }
 
-  // IL/XL along boundary edges (IL blue, XL red)
+  // IL/XL along boundary edges (IL cyan, XL red)
   const edges = getEdges(boundary);
   let edgeLabelAnnotations = [];
   if (gridData.inlines.length > 0 && gridData.xlines.length > 0) {
@@ -226,19 +276,24 @@ export default function MapView() {
       let labels;
       if (isVertical) {
         const edgeX = (edge[0][0] + edge[1][0]) / 2;
-        labels = gridData.xlines.filter(xl =>
-          xl.points.some(pt =>
-            Math.abs(pt[0] - edgeX) < (Math.abs(edge[0][0] - edge[1][0]) / 10 + 10)
-          )
-        ).map(xl => ({ num: xl.xline, type: "XL" }));
+        // Sample a few xlines for this edge
+        const sampleSize = Math.min(4, gridData.xlines.length);
+        const step = Math.max(1, Math.floor(gridData.xlines.length / sampleSize));
+        labels = gridData.xlines
+          .filter((_, index) => index % step === 0)
+          .slice(0, sampleSize)
+          .map(xl => ({ num: xl.xline, type: "XL" }));
       } else {
         const edgeY = (edge[0][1] + edge[1][1]) / 2;
-        labels = gridData.inlines.filter(il =>
-          il.points.some(pt =>
-            Math.abs(pt[1] - edgeY) < (Math.abs(edge[0][1] - edge[1][1]) / 10 + 10)
-          )
-        ).map(il => ({ num: il.inline, type: "IL" }));
+        // Sample a few inlines for this edge
+        const sampleSize = Math.min(4, gridData.inlines.length);
+        const step = Math.max(1, Math.floor(gridData.inlines.length / sampleSize));
+        labels = gridData.inlines
+          .filter((_, index) => index % step === 0)
+          .slice(0, sampleSize)
+          .map(il => ({ num: il.inline, type: "IL" }));
       }
+      
       const labelCount = Math.min(labels.length, 4);
       for (let i = 1; i <= labelCount; ++i) {
         const t = i / (labelCount + 1);
@@ -246,17 +301,17 @@ export default function MapView() {
         const ly = edge[0][1] + t * (edge[1][1] - edge[0][1]);
         const [nx, ny] = normalOffset(edge, 28);
         const label = labels[Math.floor((i - 1) * labels.length / labelCount)];
-        const labelColor = label.type === "IL" ? "blue" : "red";
+        const labelColor = label.type === "IL" ? "#00FFFF" : "red";
         edgeLabelAnnotations.push({
           x: lx + nx,
           y: ly + ny,
           text: `${label.type}${label.num}`,
           showarrow: false,
-          font: { color: labelColor, size: 13, family: "Arial" },
+          font: { color: labelColor, size: 13, family: "Arial", weight: "bold" },
           xanchor: "center",
           yanchor: "middle",
           bgcolor: "rgba(0,0,0,0.95)",
-          bordercolor: labelColor, borderwidth: 1, borderpad: 3,
+          bordercolor: labelColor, borderwidth: 2, borderpad: 3,
         });
       }
     });
@@ -269,10 +324,10 @@ export default function MapView() {
       x: 0.96, y: 0.96,
       text: "↑<br>N",
       showarrow: false,
-      font: { color: "lime", size: 17 },
+      font: { color: "lime", size: 17, weight: "bold" },
       bgcolor: "rgba(0,0,0,0.8)",
       bordercolor: "lime",
-      borderwidth: 1,
+      borderwidth: 2,
     },
     ...gridAnnotations,
     ...boundaryAnnotations,
@@ -280,55 +335,88 @@ export default function MapView() {
   ];
 
   return (
-    <Plot
-      data={[...inlineTraces, ...xlineTraces, boundaryTrace]}
-      layout={{
-        title: {
-          text: "Seismic Map Viewer",
-          font: { color: "white", size: 17 },
-        },
-        width: 1400,
-        height: 750,
-        paper_bgcolor: "black",
-        plot_bgcolor: "black",
-        font: { color: "white" },
-        hoverlabel: { bgcolor: "black", font: { color: "white" } },
-        xaxis: {
-          title: "",
-          showgrid: true,
-          gridcolor: "rgba(128,128,128,0.35)",
-          zeroline: false,
-          tickformat: ",.0f",
-          mirror: "allticks",
-          range: [plotMinX, plotMaxX],
-          constrain: "domain",
-          automargin: true,
-          showticklabels: false,
-          ticks: ""
-        },
-        yaxis: {
-          title: "",
-          showgrid: true,
-          gridcolor: "rgba(128,128,128,0.35)",
-          zeroline: false,
-          tickformat: ",.0f",
-          mirror: "allticks",
-          range: [plotMinY, plotMaxY],
-          scaleanchor: "x",
-          automargin: true,
-          showticklabels: false,
-          ticks: ""
-        },
-        shapes: [],
-        annotations: annotations,
-        margin: { l: 105, r: 105, t: 90, b: 90 },
-        showlegend: false,
-      }}
-      config={{
-        responsive: true,
-        displayModeBar: true,
-      }}
-      style={{ width: "100%", height: "90vh" }}
-    />
+    <div>
+      <div style={{ 
+        color: 'white', 
+        backgroundColor: 'black', 
+        padding: '10px',
+        fontSize: '14px',
+        textAlign: 'center'
+      }}>
+        Displaying all {gridData.total_inlines} inlines and {gridData.total_xlines} xlines
+      </div>
+      <Plot
+        data={[...inlineTraces, ...xlineTraces, boundaryTrace]}
+        layout={{
+          title: {
+            text: "Seismic Map Viewer - All Inlines & Xlines",
+            font: { color: "white", size: 17 },
+          },
+          width: 1400,
+          height: 750,
+          paper_bgcolor: "black",
+          plot_bgcolor: "black",
+          font: { color: "white" },
+          hoverlabel: { 
+            bgcolor: "black", 
+            bordercolor: "white",
+            font: { color: "white", size: 12 },
+            align: "left"
+          },
+          xaxis: {
+            title: "",
+            showgrid: true,
+            gridcolor: "rgba(128,128,128,0.35)",
+            zeroline: false,
+            tickformat: ",.0f",
+            mirror: "allticks",
+            range: [plotMinX, plotMaxX],
+            constrain: "domain",
+            automargin: true,
+            showticklabels: false,
+            ticks: ""
+          },
+          yaxis: {
+            title: "",
+            showgrid: true,
+            gridcolor: "rgba(128,128,128,0.35)",
+            zeroline: false,
+            tickformat: ",.0f",
+            mirror: "allticks",
+            range: [plotMinY, plotMaxY],
+            scaleanchor: "x",
+            automargin: true,
+            showticklabels: false,
+            ticks: ""
+          },
+          shapes: [],
+          annotations: annotations,
+          margin: { l: 105, r: 105, t: 90, b: 90 },
+          showlegend: false,
+        }}
+        config={{
+          responsive: true,
+          displayModeBar: true,
+          displaylogo: false,
+          modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+          toImageButtonOptions: {
+            format: 'png',
+            filename: 'seismic_survey_map',
+          }
+        }}
+        style={{ width: "100%", height: "90vh" }}
+      />
+      <div style={{ 
+        color: 'white', 
+        backgroundColor: 'black', 
+        padding: '10px',
+        fontSize: '12px',
+        textAlign: 'center'
+      }}>
+        <span style={{ color: '#00FFFF', marginRight: '20px' }}>■ Inlines (IL)</span>
+        <span style={{ color: 'red', marginRight: '20px' }}>■ Crosslines (XL)</span>
+        <span style={{ color: '#00FF00' }}>■ Survey Boundary</span>
+      </div>
+    </div>
   );
 }
