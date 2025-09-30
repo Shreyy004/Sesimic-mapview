@@ -112,26 +112,121 @@ def survey_boundary():
     })
 
 # ----------------------
-# Grid data
+# NEW: Optimized grid data for all lines with hover info
 # ----------------------
-@app.route('/grid-data')
-def grid_data():
+@app.route('/grid-data-all')
+def grid_data_all():
+    """
+    Returns all inlines and xlines but in an optimized format
+    to prevent frontend overload, with hover information
+    """
     df = read_segy_metadata()
-    spacing = int(request.args.get('spacing', 1))
+    
+    # Get all unique inlines and xlines
+    all_inlines = sorted(df['INLINE'].unique())
+    all_xlines = sorted(df['XLINE'].unique())
+    
+    # For inlines: group by inline and get all points with hover info
+    inline_data = []
+    for il in all_inlines:
+        il_data = df[df['INLINE'] == il]
+        if len(il_data) >= 2:
+            points = il_data[['X', 'Y']].values.tolist()
+            # Create hover info for each point
+            hover_info = []
+            for _, row in il_data.iterrows():
+                hover_info.append(f"INLINE: {int(row['INLINE'])}<br>X: {row['X']:.2f}<br>Y: {row['Y']:.2f}")
+            
+            inline_data.append({
+                'inline': int(il),
+                'points': points,
+                'hover_info': hover_info
+            })
+    
+    # For xlines: group by xline and get all points with hover info
+    xline_data = []
+    for xl in all_xlines:
+        xl_data = df[df['XLINE'] == xl]
+        if len(xl_data) >= 2:
+            points = xl_data[['X', 'Y']].values.tolist()
+            # Create hover info for each point
+            hover_info = []
+            for _, row in xl_data.iterrows():
+                hover_info.append(f"XLINE: {int(row['XLINE'])}<br>X: {row['X']:.2f}<br>Y: {row['Y']:.2f}")
+            
+            xline_data.append({
+                'xline': int(xl),
+                'points': points,
+                'hover_info': hover_info
+            })
+    
+    return jsonify({
+        'inlines': inline_data,
+        'xlines': xline_data,
+        'total_inlines': len(inline_data),
+        'total_xlines': len(xline_data)
+    })
 
-    inlines = sorted(df['INLINE'].unique())[::spacing]
-    xlines = sorted(df['XLINE'].unique())[::spacing]
-
-    inline_lines = [
-        {'inline': int(il), 'points': df[df['INLINE'] == il][['X', 'Y']].values.tolist()}
-        for il in inlines
-    ]
-    xline_lines = [
-        {'xline': int(xl), 'points': df[df['XLINE'] == xl][['X', 'Y']].values.tolist()}
-        for xl in xlines
-    ]
-
-    return jsonify({'inlines': inline_lines, 'xlines': xline_lines})
+# ----------------------
+# Alternative: Optimized grid data using segments (for very large datasets)
+# ----------------------
+@app.route('/grid-data-optimized')
+def grid_data_optimized():
+    """
+    Returns all inlines and xlines using segments for maximum performance
+    """
+    df = read_segy_metadata()
+    
+    # Get all unique inlines and xlines
+    all_inlines = sorted(df['INLINE'].unique())
+    all_xlines = sorted(df['XLINE'].unique())
+    
+    # For inlines: create segments with midpoint hover info
+    inline_segments = []
+    for il in all_inlines:
+        il_data = df[df['INLINE'] == il]
+        if len(il_data) >= 2:
+            points = il_data[['X', 'Y']].values
+            # Use first and last point to create a segment
+            start_x, start_y = float(points[0][0]), float(points[0][1])
+            end_x, end_y = float(points[-1][0]), float(points[-1][1])
+            mid_x = (start_x + end_x) / 2
+            mid_y = (start_y + end_y) / 2
+            
+            inline_segments.append({
+                'inline': int(il),
+                'start': [start_x, start_y],
+                'end': [end_x, end_y],
+                'midpoint': [mid_x, mid_y],
+                'hover_info': f"INLINE: {int(il)}<br>X: {mid_x:.2f}<br>Y: {mid_y:.2f}"
+            })
+    
+    # For xlines: create segments with midpoint hover info
+    xline_segments = []
+    for xl in all_xlines:
+        xl_data = df[df['XLINE'] == xl]
+        if len(xl_data) >= 2:
+            points = xl_data[['X', 'Y']].values
+            # Use first and last point to create a segment
+            start_x, start_y = float(points[0][0]), float(points[0][1])
+            end_x, end_y = float(points[-1][0]), float(points[-1][1])
+            mid_x = (start_x + end_x) / 2
+            mid_y = (start_y + end_y) / 2
+            
+            xline_segments.append({
+                'xline': int(xl),
+                'start': [start_x, start_y],
+                'end': [end_x, end_y],
+                'midpoint': [mid_x, mid_y],
+                'hover_info': f"XLINE: {int(xl)}<br>X: {mid_x:.2f}<br>Y: {mid_y:.2f}"
+            })
+    
+    return jsonify({
+        'inlines': inline_segments,
+        'xlines': xline_segments,
+        'total_inlines': len(inline_segments),
+        'total_xlines': len(xline_segments)
+    })
 
 # ----------------------
 # Grid coordinates endpoint
@@ -178,31 +273,20 @@ def get_survey_data():
     with app.test_request_context():
         boundary_json = survey_boundary().json
 
-    # Grid
+    # Grid data (using optimized version with hover info)
     with app.test_request_context():
-        grid_json = grid_data().json
+        grid_json = grid_data_all().json
 
     # Convert for frontend
     boundary_list = [{'x': x, 'y': y} for x, y in boundary_json['boundary']]
 
-    # Convert inline/xline to start & end points
-    inline_segments = []
-    for il in grid_json['inlines']:
-        pts = il['points']
-        if len(pts) >= 2:
-            inline_segments.append([pts[0][0], pts[0][1], pts[-1][0], pts[-1][1]])
-
-    xline_segments = []
-    for xl in grid_json['xlines']:
-        pts = xl['points']
-        if len(pts) >= 2:
-            xline_segments.append([pts[0][0], pts[0][1], pts[-1][0], pts[-1][1]])
-
     return jsonify({
         'coords': [],  # optional raw coords
         'boundary': boundary_list,
-        'inlines': inline_segments,
-        'xlines': xline_segments
+        'inlines': grid_json['inlines'],
+        'xlines': grid_json['xlines'],
+        'total_inlines': grid_json['total_inlines'],
+        'total_xlines': grid_json['total_xlines']
     })
 
 if __name__ == '__main__':
