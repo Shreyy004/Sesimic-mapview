@@ -1,0 +1,3 @@
+segyio
+flask
+pandas
