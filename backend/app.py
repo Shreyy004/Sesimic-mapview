@@ -34,6 +34,9 @@ def apply_sgs_scaling(value, sgs):
     else:
         return value * sgs
 
+# ----------------------
+# Read metadata - 
+# ----------------------
 def read_segy_metadata():
     """Read SEGY metadata"""
     with segyio.open(SEGY_FILE, "r") as segy_3d:
@@ -112,7 +115,9 @@ def map_data():
     df = read_all_segy_metadata()
     return jsonify(convert_to_native(df.to_dict(orient='records')))
 
-
+# ----------------------
+# Survey Boundary - UPDATED with SGS scaling 
+# ----------------------
 @app.route('/survey-boundary')
 def survey_boundary():
     df = read_segy_metadata()  
@@ -314,7 +319,6 @@ def boundary_edge_lines():
                   2: {'inlines': [], 'xlines': []}, 
                   3: {'inlines': [], 'xlines': []}}
     
-    # Helper function to check the distance from a point to a line segment
     def point_to_line_distance(point, line_start, line_end):
         x, y = point
         x1, y1 = line_start
