@@ -678,6 +678,7 @@ export default function MapView({
         onRelayout={handlePlotRelayout}
         useResizeHandler={true}
       />       
+      {/* REMOVED: The entire footer div is now gone */}
     </div>
   );
 }
